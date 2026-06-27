@@ -1,145 +1,99 @@
 name: Deploy to Amazon ECS
+
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+
 env:
   AWS_REGION: us-east-1
   ECS_CLUSTER: innovatech-cluster
-permissions:
-  contents: read
-jobs:
-  deploy-ventas:
-    name: Build & Deploy Ventas
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Filter paths
-      uses: dorny/paths-filter@v3
-      id: filter
-      with:
-        filters: |
-          ventas:
-            - 'back-Ventas_SpringBoot/**'
-    - name: Set up JDK 17
-      if: steps.filter.outputs.ventas == 'true'
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
-    - name: Build with Maven
-      if: steps.filter.outputs.ventas == 'true'
-      run: |
-        cd back-Ventas_SpringBoot/Springboot-API-REST
-        mvn clean package
-    - name: Configure AWS credentials
-      if: steps.filter.outputs.ventas == 'true'
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-    - name: Login to Amazon ECR
-      if: steps.filter.outputs.ventas == 'true'
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-    - name: Build, tag, and push image to Amazon ECR
-      if: steps.filter.outputs.ventas == 'true'
-      id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: back-ventas
-        IMAGE_TAG: ${{ github.sha }}
-      run: |
-        cd back-Ventas_SpringBoot/Springboot-API-REST
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-    - name: Download task definition
-      if: steps.filter.outputs.ventas == 'true'
-      run: aws ecs describe-task-definition --task-definition ventas-task --query taskDefinition > task-definition.json
-    - name: Fill in the new image ID in the Amazon ECS task definition
-      if: steps.filter.outputs.ventas == 'true'
-      id: render-task-def
-      uses: aws-actions/amazon-ecs-render-task-definition@v1
-      with:
-        task-definition: task-definition.json
-        container-name: backend_ventas
-        image: ${{ steps.build-image.outputs.image }}
-    - name: Deploy Amazon ECS task definition
-      if: steps.filter.outputs.ventas == 'true'
-      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-      with:
-        task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-        service: ventas-service
-        cluster: ${{ env.ECS_CLUSTER }}
-        wait-for-service-stability: true
+  
+  TASK_DEF_VENTAS: ventas-task
+  ECS_SERVICE_VENTAS: servicio-ventas
+  CONTAINER_NAME_VENTAS: back-ventas
+  
+  TASK_DEF_DESPACHOS: despachos-task
+  ECS_SERVICE_DESPACHOS: servicio-despachos
+  CONTAINER_NAME_DESPACHOS: back-despachos
 
-  deploy-despachos:
-    name: Build & Deploy Despachos
+jobs:
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-    - name: Filter paths
-      uses: dorny/paths-filter@v3
-      id: filter
-      with:
-        filters: |
-          despachos:
-            - 'back-Despachos_SpringBoot/**'
-    - name: Set up JDK 17
-      if: steps.filter.outputs.despachos == 'true'
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
-    - name: Build with Maven
-      if: steps.filter.outputs.despachos == 'true'
-      run: |
-        cd back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
-        mvn clean package
+
     - name: Configure AWS credentials
-      if: steps.filter.outputs.despachos == 'true'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
         aws-region: ${{ env.AWS_REGION }}
+
     - name: Login to Amazon ECR
-      if: steps.filter.outputs.despachos == 'true'
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
-    - name: Build, tag, and push image to Amazon ECR
-      if: steps.filter.outputs.despachos == 'true'
-      id: build-image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: back-despachos
-        IMAGE_TAG: ${{ github.sha }}
+
+    - name: Build, tag, and push Ventas image to Amazon ECR
+      id: build-image-ventas
       run: |
-        cd back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-    - name: Download task definition
-      if: steps.filter.outputs.despachos == 'true'
-      run: aws ecs describe-task-definition --task-definition despachos-task --query taskDefinition > task-definition.json
-    - name: Fill in the new image ID in the Amazon ECS task definition
-      if: steps.filter.outputs.despachos == 'true'
-      id: render-task-def
+        docker build -t 674415805593.dkr.ecr.us-east-1.amazonaws.com/back-ventas:latest ./back-Ventas_SpringBoot/Springboot-API-REST
+        docker push 674415805593.dkr.ecr.us-east-1.amazonaws.com/back-ventas:latest
+        echo "image=674415805593.dkr.ecr.us-east-1.amazonaws.com/back-ventas:latest" >> $GITHUB_OUTPUT
+
+    - name: Build, tag, and push Despachos image to Amazon ECR
+      id: build-image-despachos
+      run: |
+        docker build -t 674415805593.dkr.ecr.us-east-1.amazonaws.com/back-despachos:latest ./back-Despachos_SpringBoot/Springboot-API-REST-DESPACHO
+        docker push 674415805593.dkr.ecr.us-east-1.amazonaws.com/back-despachos:latest
+        echo "image=674415805593.dkr.ecr.us-east-1.amazonaws.com/back-despachos:latest" >> $GITHUB_OUTPUT
+
+    - name: Download Ventas task definition
+      run: |
+        aws ecs describe-task-definition \
+          --task-definition ${{ env.TASK_DEF_VENTAS }} \
+          --query taskDefinition > task-definition-ventas.json
+
+    - name: Fill in the new image ID in the Amazon ECS task definition for Ventas
+      id: task-def-ventas
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        task-definition: task-definition.json
-        container-name: backend_despachos
-        image: ${{ steps.build-image.outputs.image }}
-    - name: Deploy Amazon ECS task definition
-      if: steps.filter.outputs.despachos == 'true'
+        task-definition: task-definition-ventas.json
+        container-name: ${{ env.CONTAINER_NAME_VENTAS }}
+        image: ${{ steps.build-image-ventas.outputs.image }}
+
+    - name: Deploy Amazon ECS task definition for Ventas
       uses: aws-actions/amazon-ecs-deploy-task-definition@v2
       with:
-        task-definition: ${{ steps.render-task-def.outputs.task-definition }}
-        service: despachos-service
+        task-definition: ${{ steps.task-def-ventas.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE_VENTAS }}
         cluster: ${{ env.ECS_CLUSTER }}
         wait-for-service-stability: true
+        force-new-deployment: true
+
+    - name: Download Despachos task definition
+      run: |
+        aws ecs describe-task-definition \
+          --task-definition ${{ env.TASK_DEF_DESPACHOS }} \
+          --query taskDefinition > task-definition-despachos.json
+
+    - name: Fill in the new image ID in the Amazon ECS task definition for Despachos
+      id: task-def-despachos
+      uses: aws-actions/amazon-ecs-render-task-definition@v1
+      with:
+        task-definition: task-definition-despachos.json
+        container-name: ${{ env.CONTAINER_NAME_DESPACHOS }}
+        image: ${{ steps.build-image-despachos.outputs.image }}
+
+    - name: Deploy Amazon ECS task definition for Despachos
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      with:
+        task-definition: ${{ steps.task-def-despachos.outputs.task-definition }}
+        service: ${{ env.ECS_SERVICE_DESPACHOS }}
+        cluster: ${{ env.ECS_CLUSTER }}
+        wait-for-service-stability: true
+        force-new-deployment: true
